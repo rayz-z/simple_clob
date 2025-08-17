@@ -1,0 +1,7 @@
+[package]
+name = "clob"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+stochastic-rs = "0.13.4"
