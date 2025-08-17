@@ -1,6 +1,6 @@
 use std::fmt::Error;
 use std::time::SystemTime;
-// pub mod order_generator;
+pub mod order_generator;
 // pub mod order_match;
 use std::collections::BTreeMap;
 
@@ -9,7 +9,7 @@ type Price = u64;
 // simulate order flow
 #[derive(PartialEq, Eq, Debug)]
 pub struct Order {
-    buy_order: bool,
+    buy_order: bool, // refactor as enum
     price: Price,
     id: u128, // change to str in future
     time_created: SystemTime,
