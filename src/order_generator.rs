@@ -42,10 +42,11 @@ impl OrderGenerator {
 
 
         let vol = self.vol.get();
+        let rand_noise = rand_gen.random_range(0.0..vol);
         if rand_gen.random_bool(self.rng.get() as f64) {// only generates two outcome prices instead of range
-            center = (1.0 + vol) * center;
+            center = (1.0 + rand_noise) * center;
         } else {
-            center = (1.0 - vol) * center;
+            center = (1.0 - rand_noise) * center;
         }
 
         (buy_sell, center as u64) // center gets rounded
