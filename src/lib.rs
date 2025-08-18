@@ -41,7 +41,7 @@ pub struct OrderBook {
 
 // clear orders
 impl OrderBook {
-    fn build() -> Self {
+    pub fn build() -> Self {
         OrderBook {
             total_orders: 0,
             buy_orders: BTreeMap::new(),
@@ -111,15 +111,15 @@ impl OrderBook {
 
     pub fn display(&self) {
         println!("Order Book Stats");
-        println!();
+        println!("-------------------");
         println!("bids");
         for (bid, order) in self.buy_orders.iter() {
-            println!("{}", bid);
+            println!("Bid price: {}", order.price);
         }
-        println!();
+        println!("-------------------");
         println!("asks");
         for (ask, order) in self.sell_orders.iter() {
-            println!("{}", ask);
+            println!("Ask price: {}", order.price);
         }
     }
 }

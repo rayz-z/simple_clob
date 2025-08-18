@@ -1,20 +1,21 @@
 use rand::Rng;
-use crate::Order;
-use std::time::SystemTime;
 
 #[derive(Clone, Copy)]
-pub struct Probability(u64);
+pub struct Probability(f64);
 
 impl Probability {
-    pub fn new(val: u64) -> Option<Self> {
-        if val > 1 {
+    pub fn new(val: f64) -> Option<Self> {
+        // refactor so all decimals are actually decimals
+        if val > 1.0 || val < 0.0 {
+            println!("Probability value out of range: {}", val);
             None
         } else {
             Some(Probability(val))
         }
     }
 
-    pub fn get(self) -> u64 {// you don't want to get it since it will give you ownership instead of order generator --> make it so can't
+    pub fn get(self) -> f64 {
+        // you don't want to get it since it will give you ownership instead of order generator --> make it so can't
         self.0
     }
 }
@@ -25,13 +26,16 @@ pub struct OrderGenerator {
 }
 
 impl OrderGenerator {
-    pub fn build(&self, rng: u64, vol:u64) -> Option<Self> {
+    pub fn build(rng: f64, vol: f64) -> Option<Self> {
         let prob_rng = Probability::new(rng)?;
         let prob_vol = Probability::new(vol)?;
-        Some(OrderGenerator { rng: prob_rng, vol: prob_vol })
+        Some(OrderGenerator {
+            rng: prob_rng,
+            vol: prob_vol,
+        })
     }
 
-    pub fn gen_order(&self, mut center: u64, id: u128) -> Order {
+    pub fn gen_order(&self, mut center: f64) -> (bool, u64) {
         let mut rand_gen = rand::rng();
 
         let buy_sell = rand_gen.random_bool(0.5);
@@ -42,11 +46,10 @@ impl OrderGenerator {
             center = self.vol.clone().get() * center - center;
         }
 
-        Order { buy_order: buy_sell, price: center, id, time_created: SystemTime::now() }
+        (buy_sell, center as u64) // center gets rounded
     }
 
     pub fn start() {}
 
     pub fn stop() {}
-
 }
