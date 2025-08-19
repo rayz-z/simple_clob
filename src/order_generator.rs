@@ -43,7 +43,8 @@ impl OrderGenerator {
 
         let vol = self.vol.get();
         let rand_noise = rand_gen.random_range(0.0..vol);
-        if rand_gen.random_bool(self.rng.get() as f64) {// only generates two outcome prices instead of range
+        if rand_gen.random_bool(self.rng.get() as f64) {// buy and sell are picked from the same distribution 
+                                                        // --> distributions should be on edge of each other
             center = (1.0 + rand_noise) * center;
         } else {
             center = (1.0 - rand_noise) * center;

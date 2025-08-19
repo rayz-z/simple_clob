@@ -28,9 +28,9 @@ pub struct Transaction {
 // one asset
 #[derive(PartialEq, Eq, Debug)]
 pub struct OrderBook {
-    total_orders: u128,                 // historic amount
-    buy_orders: BTreeMap<Price, Order>,  // refactor into Vec<Order>
-    sell_orders: BTreeMap<Price, Order>, // "        " f64 doesn't implement eq
+    total_orders: u128,                       // historic amount
+    buy_orders: BTreeMap<Price, Vec<Order>>,  // refactor into Vec<Order>
+    sell_orders: BTreeMap<Price, Vec<Order>>, // "        " f64 doesn't implement eq
     transactions: Vec<Transaction>,
 }
 
@@ -53,15 +53,15 @@ impl OrderBook {
     pub fn buy(self: &mut Self, buy: bool, price: Price) {
         let id = self.total_orders;
         if buy {
-            self.buy_orders.insert(
-                price,
-                Order {
+            self.buy_orders
+                .entry(price)
+                .or_insert_with(Vec::new)
+                .push(Order {
                     buy_order: buy,
                     price,
                     id,
                     time_created: SystemTime::now(),
-                },
-            );
+                });
             self.total_orders += 1;
         } else {
             println!("not a buy order");
@@ -71,15 +71,15 @@ impl OrderBook {
     pub fn sell(self: &mut Self, buy: bool, price: Price) {
         let id = self.total_orders;
         if !buy {
-            self.sell_orders.insert(
-                price,
-                Order {
+            self.sell_orders
+                .entry(price)
+                .or_insert_with(Vec::new)
+                .push(Order {
                     buy_order: buy,
                     price,
                     id,
                     time_created: SystemTime::now(),
-                },
-            );
+                });
             self.total_orders += 1;
         } else {
             println!("not a sell order");
@@ -87,11 +87,19 @@ impl OrderBook {
     }
 
     pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
-        if let Some((price, _)) = self.buy_orders.iter().find(|(_, b)| b.id == id) {
-            return Ok(self.buy_orders.remove(&price.clone()).unwrap());
+        for (_, orders) in self.buy_orders.iter_mut() {
+            let mut index = 0;
+            if let Some(_) = orders.iter().find(|b| b.id == id) {
+                return Ok(orders.remove(index));
+            }
+            index += 1;
         }
-        if let Some((price, _)) = self.sell_orders.iter().find(|(_, b)| b.id == id) {
-            return Ok(self.sell_orders.remove(&price.clone()).unwrap());
+        for (_, orders) in self.sell_orders.iter_mut() {
+            let mut index = 0;
+            if let Some(_) = orders.iter().find(|b| b.id == id) {
+                return Ok(orders.remove(index));
+            }
+            index += 1;
         }
         Err(Error)
     }
@@ -114,16 +122,19 @@ impl OrderBook {
         println!("-------------------");
         println!("bids");
         for (bid, order) in self.buy_orders.iter() {
-            println!("Bid price: {}", order.price);
+            for ord in order {
+                println!("Bid price: {}", ord.price);
+            }
         }
         println!("-------------------");
         println!("asks");
         for (ask, order) in self.sell_orders.iter() {
-            println!("Ask price: {}", order.price);
+            for ord in order {
+                println!("Bid price: {}", ord.price);
+            }
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -180,7 +191,6 @@ mod tests {
         assert_eq!(a.buy_orders.len(), 0);
         assert_eq!(a.sell_orders.len(), 0);
     }
-    
-    // add test for multiple orders
 
+    // add test for multiple orders
 }
