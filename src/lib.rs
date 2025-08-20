@@ -11,6 +11,7 @@ type Price = u64;
 pub struct Order {
     buy_order: bool, // refactor as enum
     price: Price,
+    quantity: u128,
     id: u128, // change to str in future
     time_created: SystemTime,
 }
@@ -50,7 +51,7 @@ impl OrderBook {
         }
     }
 
-    pub fn buy(self: &mut Self, buy: bool, price: Price) {
+    pub fn buy(self: &mut Self, buy: bool, price: Price, quantity: u128) {
         let id = self.total_orders;
         if buy {
             self.buy_orders
@@ -59,16 +60,31 @@ impl OrderBook {
                 .push(Order {
                     buy_order: buy,
                     price,
+                    quantity,
                     id,
                     time_created: SystemTime::now(),
                 });
             self.total_orders += 1;
         } else {
             println!("not a buy order");
+            return;
+        }
+
+        // while there are still sells <= buy price --> buy and push that to part of the transaction
+        // or resolve when quantity hits 0
+        while self.get_buy_order(id).unwrap().quantity > 0 {
+            let (sell_price, _) = self.sell_orders.first_key_value().unwrap();
+            if price < *sell_price {
+                break;
+            }
+
+            if let Some(mut entry) = self.sell_orders.first_entry(){
+                entry.get();
+            }
         }
     }
 
-    pub fn sell(self: &mut Self, buy: bool, price: Price) {
+    pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
         let id = self.total_orders;
         if !buy {
             self.sell_orders
@@ -77,12 +93,14 @@ impl OrderBook {
                 .push(Order {
                     buy_order: buy,
                     price,
+                    quantity,
                     id,
                     time_created: SystemTime::now(),
                 });
             self.total_orders += 1;
         } else {
             println!("not a sell order");
+            return;
         }
     }
 
@@ -104,7 +122,7 @@ impl OrderBook {
         Err(Error)
     }
 
-    pub fn resolve(self: &mut Self) {
+    pub fn resolve(self: &mut Self) {// change for quantity
         if self.buy_orders.last_entry().unwrap().key()
             >= self.sell_orders.first_entry().unwrap().key()
         {
@@ -133,6 +151,24 @@ impl OrderBook {
                 println!("Bid price: {}", ord.price);
             }
         }
+    }
+
+    pub fn get_buy_order(&self, id: u128) -> Result<&Order, Error> {
+        for (_, orders) in self.buy_orders.iter() {
+            if let Some(ord) = orders.iter().find(|b| b.id == id) {
+                return Ok(ord);
+            }
+        }
+        Err(Error)
+    }
+
+    pub fn get_sell_order(&self, id: u128) -> Result<&Order, Error> {
+        for (_, orders) in self.sell_orders.iter() {
+            if let Some(ord) = orders.iter().find(|b| b.id == id) {
+                return Ok(ord);
+            }
+        }
+        Err(Error)
     }
 }
 
