@@ -13,9 +13,9 @@ fn main() {
         for _ in 0..20 {
             let (buy_sell, price) = ord_gen.gen_order(10.0);
             if buy_sell{
-                ord_book.buy(true, price);
+                ord_book.buy(true, price, 1);
             } else {
-                ord_book.sell(false, price);
+                ord_book.sell(false, price, 1);
             }
         }
     } else {

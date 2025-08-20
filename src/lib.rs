@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 type Price = u64;
 
 // simulate order flow
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Order {
     buy_order: bool, // refactor as enum
     price: Price,
@@ -19,6 +19,7 @@ pub struct Order {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Transaction {
     price: Price,
+    quantity: u128,
     time: SystemTime,
 }
 
@@ -39,6 +40,15 @@ pub struct OrderBook {
 //     fn display(&self) {
 //     }
 // }
+impl Transaction {
+    pub fn new() -> Self {
+        Transaction {
+            price: 0,
+            quantity: 0,
+            time: SystemTime::now(),
+        }
+    }
+}
 
 // clear orders
 impl OrderBook {
@@ -52,6 +62,11 @@ impl OrderBook {
     }
 
     pub fn buy(self: &mut Self, buy: bool, price: Price, quantity: u128) {
+        if quantity == 0 {
+            println!("quantity can't be 0");
+            return;
+        }
+
         let id = self.total_orders;
         if buy {
             self.buy_orders
@@ -72,19 +87,57 @@ impl OrderBook {
 
         // while there are still sells <= buy price --> buy and push that to part of the transaction
         // or resolve when quantity hits 0
-        while self.get_buy_order(id).unwrap().quantity > 0 {
+        let mut trans = Transaction::new();
+        let mut ord_quantity = self.get_mut_buy_order(id).unwrap().quantity; // need mutable reference
+
+        while ord_quantity > 0 && !self.sell_orders.is_empty(){
             let (sell_price, _) = self.sell_orders.first_key_value().unwrap();
             if price < *sell_price {
                 break;
             }
 
-            if let Some(mut entry) = self.sell_orders.first_entry(){
-                entry.get();
+            if let Some(mut entry) = self.sell_orders.first_entry() {
+                let order: &mut Vec<Order> = entry.get_mut();
+                if !order.is_empty() {
+                    let ord = order.get_mut(0).unwrap();
+                    if ord.quantity > ord_quantity {
+                        ord.quantity = ord.quantity - ord_quantity;
+
+                        trans.quantity += ord_quantity;
+                        trans.time = SystemTime::now();
+                        ord_quantity = 0;
+
+                        // remove ord from buy_orders
+                        self.cancel(id);
+                    } else if ord.quantity == ord_quantity {
+                        order.remove(0);
+
+                        trans.quantity += ord_quantity;
+                        trans.time = SystemTime::now();
+                        ord_quantity = 0;
+
+                        self.cancel(id);
+                    } else {
+                        ord_quantity = ord_quantity - ord.quantity;
+
+                        trans.quantity += ord.quantity;
+                        trans.time = SystemTime::now();
+                        ord.quantity = 0;
+
+                        order.remove(0);
+                    }
+                }
             }
         }
+        self.transactions.push(trans);
     }
 
     pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
+        if quantity == 0 {
+            println!("quantity can't be 0");
+            return;
+        }
+
         let id = self.total_orders;
         if !buy {
             self.sell_orders
@@ -102,6 +155,50 @@ impl OrderBook {
             println!("not a sell order");
             return;
         }
+
+        let mut trans = Transaction::new();
+        let mut ord_quantity = self.get_mut_sell_order(id).unwrap().quantity; // need mutable reference
+
+        while ord_quantity > 0 && !self.buy_orders.is_empty() {
+            let (buy_price, _) = self.buy_orders.first_key_value().unwrap();
+            if price < *buy_price {
+                break;
+            }
+
+            if let Some(mut entry) = self.buy_orders.first_entry() {
+                let order: &mut Vec<Order> = entry.get_mut();
+                if !order.is_empty() {
+                    let ord = order.get_mut(0).unwrap();
+                    if ord.quantity > ord_quantity {
+                        ord.quantity = ord.quantity - ord_quantity;
+
+                        trans.quantity += ord_quantity;
+                        trans.time = SystemTime::now();
+                        ord_quantity = 0;
+
+                        // remove ord from buy_orders
+                        self.cancel(id);
+                    } else if ord.quantity == ord_quantity {
+                        order.remove(0);
+
+                        trans.quantity += ord_quantity;
+                        trans.time = SystemTime::now();
+                        ord_quantity = 0;
+
+                        self.cancel(id);
+                    } else {
+                        ord_quantity = ord_quantity - ord.quantity;
+
+                        trans.quantity += ord.quantity;
+                        trans.time = SystemTime::now();
+                        ord.quantity = 0;
+
+                        order.remove(0);
+                    }
+                }
+            }
+        }
+        self.transactions.push(trans);
     }
 
     pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
@@ -122,18 +219,19 @@ impl OrderBook {
         Err(Error)
     }
 
-    pub fn resolve(self: &mut Self) {// change for quantity
-        if self.buy_orders.last_entry().unwrap().key()
-            >= self.sell_orders.first_entry().unwrap().key()
-        {
-            self.buy_orders.pop_last();
-            let (trans, _) = self.sell_orders.pop_first().unwrap();
-            self.transactions.push(Transaction {
-                price: trans,
-                time: SystemTime::now(),
-            });
-        }
-    }
+    // pub fn resolve(self: &mut Self) {
+    //     // change for quantity
+    //     if self.buy_orders.last_entry().unwrap().key()
+    //         >= self.sell_orders.first_entry().unwrap().key()
+    //     {
+    //         self.buy_orders.pop_last();
+    //         let (trans, _) = self.sell_orders.pop_first().unwrap();
+    //         self.transactions.push(Transaction {
+    //             price: trans,
+    //             time: SystemTime::now(),
+    //         });
+    //     }
+    // }
 
     pub fn display(&self) {
         println!("Order Book Stats");
@@ -162,9 +260,27 @@ impl OrderBook {
         Err(Error)
     }
 
+    pub fn get_mut_buy_order(self: &mut Self, id: u128) -> Result<&mut Order, Error> {
+        for (_, orders) in self.buy_orders.iter_mut() {
+            if let Some(ord) = orders.iter_mut().find(|b| b.id == id) {
+                return Ok(ord);
+            }
+        }
+        Err(Error)
+    }
+
     pub fn get_sell_order(&self, id: u128) -> Result<&Order, Error> {
         for (_, orders) in self.sell_orders.iter() {
             if let Some(ord) = orders.iter().find(|b| b.id == id) {
+                return Ok(ord);
+            }
+        }
+        Err(Error)
+    }
+
+    pub fn get_mut_sell_order(self: &mut Self, id: u128) -> Result<&mut Order, Error> {
+        for (_, orders) in self.sell_orders.iter_mut() {
+            if let Some(ord) = orders.iter_mut().find(|b| b.id == id) {
                 return Ok(ord);
             }
         }
@@ -192,7 +308,7 @@ mod tests {
     #[test]
     fn test_buy() {
         let mut a = OrderBook::build();
-        a.buy(true, 2);
+        a.buy(true, 2, 1);
 
         assert_eq!(a.buy_orders.len(), 1);
     }
@@ -200,7 +316,7 @@ mod tests {
     #[test]
     fn test_sell() {
         let mut a = OrderBook::build();
-        a.sell(false, 2);
+        a.sell(false, 2, 1);
 
         assert_eq!(a.sell_orders.len(), 1);
     }
@@ -208,25 +324,25 @@ mod tests {
     #[test]
     fn test_cancel() {
         let mut a = OrderBook::build();
-        a.buy(true, 2);
+        a.buy(true, 2, 1);
 
         let b = a.cancel(0);
 
         assert_eq!(a.buy_orders.len(), 0);
     }
 
-    #[test]
-    fn test_resolve() {
-        let mut a = OrderBook::build();
-        a.sell(false, 2);
-        a.buy(true, 2);
+    // #[test]
+    // fn test_resolve() {
+    //     let mut a = OrderBook::build();
+    //     a.sell(false, 2);
+    //     a.buy(true, 2);
 
-        a.resolve();
+    //     a.resolve();
 
-        assert_eq!(a.transactions.len(), 1);
-        assert_eq!(a.buy_orders.len(), 0);
-        assert_eq!(a.sell_orders.len(), 0);
-    }
+    //     assert_eq!(a.transactions.len(), 1);
+    //     assert_eq!(a.buy_orders.len(), 0);
+    //     assert_eq!(a.sell_orders.len(), 0);
+    // }
 
     // add test for multiple orders
 }
