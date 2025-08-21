@@ -89,6 +89,71 @@ impl OrderBook {
         // or resolve when quantity hits 0
         let mut trans = Transaction::new();
 
+        // resolve/loop
+        self.transactions.push(trans);
+    }
+
+    pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
+        if quantity == 0 {
+            println!("quantity can't be 0");
+            return;
+        }
+
+        let id = self.total_orders;
+        if !buy {
+            self.sell_orders
+                .entry(price)
+                .or_insert_with(Vec::new)
+                .push(Order {
+                    buy_order: buy,
+                    price,
+                    quantity,
+                    id,
+                    time_created: SystemTime::now(),
+                });
+            self.total_orders += 1;
+        } else {
+            println!("not a sell order");
+            return;
+        }
+
+        let mut trans = Transaction::new();
+
+       // resolve
+        self.transactions.push(trans);
+    }
+
+    pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
+        for (_, orders) in self.buy_orders.iter_mut() {
+            let mut index = 0;
+            if let Some(_) = orders.iter().find(|b| b.id == id) {
+                return Ok(orders.remove(index));
+            }
+            index += 1;
+        }
+        for (_, orders) in self.sell_orders.iter_mut() {
+            let mut index = 0;
+            if let Some(_) = orders.iter().find(|b| b.id == id) {
+                return Ok(orders.remove(index));
+            }
+            index += 1;
+        }
+        Err(Error)
+    }
+
+    pub fn resolve(self: &mut Self) {
+        // change for quantity
+        if self.buy_orders.last_entry().unwrap().key()
+            >= self.sell_orders.first_entry().unwrap().key()
+        {
+            self.buy_orders.pop_last();
+            let (trans, _) = self.sell_orders.pop_first().unwrap();
+            self.transactions.push(Transaction {
+                price: trans,
+                time: SystemTime::now(),
+            });
+        }
+
         while {
             let buy_order = self.get_mut_buy_order(id).unwrap();
             buy_order.quantity > 0
@@ -129,119 +194,16 @@ impl OrderBook {
 
                     trans.quantity += ord.quantity;
                     trans.time = SystemTime::now();
-                    
 
                     orders.remove(0);
                 }
-                
             }
 
             if orders.is_empty() {
                 entry.remove();
             }
         }
-        self.transactions.push(trans);
     }
-
-    pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
-        if quantity == 0 {
-            println!("quantity can't be 0");
-            return;
-        }
-
-        let id = self.total_orders;
-        if !buy {
-            self.sell_orders
-                .entry(price)
-                .or_insert_with(Vec::new)
-                .push(Order {
-                    buy_order: buy,
-                    price,
-                    quantity,
-                    id,
-                    time_created: SystemTime::now(),
-                });
-            self.total_orders += 1;
-        } else {
-            println!("not a sell order");
-            return;
-        }
-
-        let mut trans = Transaction::new();
-
-        while self.get_sell_order_quantity(id).unwrap() > 0 && !self.buy_orders.is_empty() {
-            let (buy_price, _) = self.buy_orders.first_key_value().unwrap();
-            if price < *buy_price {
-                break;
-            }
-
-            if let Some(mut entry) = self.buy_orders.first_entry() {
-                let order: &mut Vec<Order> = entry.get_mut();
-                if !order.is_empty() {
-                    let ord = order.get_mut(0).unwrap();
-                    if ord.quantity > ord_quantity.quantity {
-                        ord.quantity = ord.quantity - ord_quantity.quantity;
-
-                        trans.quantity += ord_quantity.quantity;
-                        trans.time = SystemTime::now();
-                        ord_quantity.quantity = 0;
-
-                        // remove ord from buy_orders
-                        self.cancel(id);
-                    } else if ord.quantity == ord_quantity.quantity {
-                        order.remove(0);
-
-                        trans.quantity += ord_quantity.quantity;
-                        trans.time = SystemTime::now();
-                        ord_quantity.quantity = 0;
-
-                        self.cancel(id);
-                    } else {
-                        ord_quantity.quantity = ord_quantity.quantity - ord.quantity;
-
-                        trans.quantity += ord.quantity;
-                        trans.time = SystemTime::now();
-                        ord.quantity = 0;
-
-                        order.remove(0);
-                    }
-                }
-            }
-        }
-        self.transactions.push(trans);
-    }
-
-    pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
-        for (_, orders) in self.buy_orders.iter_mut() {
-            let mut index = 0;
-            if let Some(_) = orders.iter().find(|b| b.id == id) {
-                return Ok(orders.remove(index));
-            }
-            index += 1;
-        }
-        for (_, orders) in self.sell_orders.iter_mut() {
-            let mut index = 0;
-            if let Some(_) = orders.iter().find(|b| b.id == id) {
-                return Ok(orders.remove(index));
-            }
-            index += 1;
-        }
-        Err(Error)
-    }
-
-    // pub fn resolve(self: &mut Self) {
-    //     // change for quantity
-    //     if self.buy_orders.last_entry().unwrap().key()
-    //         >= self.sell_orders.first_entry().unwrap().key()
-    //     {
-    //         self.buy_orders.pop_last();
-    //         let (trans, _) = self.sell_orders.pop_first().unwrap();
-    //         self.transactions.push(Transaction {
-    //             price: trans,
-    //             time: SystemTime::now(),
-    //         });
-    //     }
-    // }
 
     pub fn display(&self) {
         println!("Order Book Stats");
