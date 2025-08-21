@@ -88,45 +88,56 @@ impl OrderBook {
         // while there are still sells <= buy price --> buy and push that to part of the transaction
         // or resolve when quantity hits 0
         let mut trans = Transaction::new();
-        let mut ord_quantity = self.get_mut_buy_order(id).unwrap().quantity; // need mutable reference
 
-        while ord_quantity > 0 && !self.sell_orders.is_empty(){
-            let (sell_price, _) = self.sell_orders.first_key_value().unwrap();
-            if price < *sell_price {
+        while {
+            let buy_order = self.get_mut_buy_order(id).unwrap();
+            buy_order.quantity > 0
+        } {
+            if self.sell_orders.is_empty() {
                 break;
             }
 
-            if let Some(mut entry) = self.sell_orders.first_entry() {
-                let order: &mut Vec<Order> = entry.get_mut();
-                if !order.is_empty() {
-                    let ord = order.get_mut(0).unwrap();
-                    if ord.quantity > ord_quantity {
-                        ord.quantity = ord.quantity - ord_quantity;
+            let mut entry = self.sell_orders.first_entry().unwrap();
+            let sell_price = *entry.key();
+            if price < sell_price {
+                break;
+            }
 
-                        trans.quantity += ord_quantity;
-                        trans.time = SystemTime::now();
-                        ord_quantity = 0;
+            let orders = entry.get_mut();
+            if let Some(ord) = orders.first_mut() {
+                let buy_order = self.get_mut_buy_order(id).unwrap();
 
-                        // remove ord from buy_orders
-                        self.cancel(id);
-                    } else if ord.quantity == ord_quantity {
-                        order.remove(0);
+                if ord.quantity > buy_order.quantity {
+                    ord.quantity -= buy_order.quantity;
 
-                        trans.quantity += ord_quantity;
-                        trans.time = SystemTime::now();
-                        ord_quantity = 0;
+                    trans.quantity += buy_order.quantity;
+                    trans.time = SystemTime::now();
+                    buy_order.quantity = 0;
+                    drop(buy_order);
 
-                        self.cancel(id);
-                    } else {
-                        ord_quantity = ord_quantity - ord.quantity;
+                    self.cancel(id);
+                } else if ord.quantity == buy_order.quantity {
+                    trans.quantity += buy_order.quantity;
+                    trans.time = SystemTime::now();
+                    buy_order.quantity = 0;
+                    drop(buy_order);
 
-                        trans.quantity += ord.quantity;
-                        trans.time = SystemTime::now();
-                        ord.quantity = 0;
+                    orders.remove(0);
+                    self.cancel(id);
+                } else {
+                    buy_order.quantity -= ord.quantity;
 
-                        order.remove(0);
-                    }
+                    trans.quantity += ord.quantity;
+                    trans.time = SystemTime::now();
+                    
+
+                    orders.remove(0);
                 }
+                
+            }
+
+            if orders.is_empty() {
+                entry.remove();
             }
         }
         self.transactions.push(trans);
@@ -157,9 +168,8 @@ impl OrderBook {
         }
 
         let mut trans = Transaction::new();
-        let mut ord_quantity = self.get_mut_sell_order(id).unwrap().quantity; // need mutable reference
 
-        while ord_quantity > 0 && !self.buy_orders.is_empty() {
+        while self.get_sell_order_quantity(id).unwrap() > 0 && !self.buy_orders.is_empty() {
             let (buy_price, _) = self.buy_orders.first_key_value().unwrap();
             if price < *buy_price {
                 break;
@@ -169,25 +179,25 @@ impl OrderBook {
                 let order: &mut Vec<Order> = entry.get_mut();
                 if !order.is_empty() {
                     let ord = order.get_mut(0).unwrap();
-                    if ord.quantity > ord_quantity {
-                        ord.quantity = ord.quantity - ord_quantity;
+                    if ord.quantity > ord_quantity.quantity {
+                        ord.quantity = ord.quantity - ord_quantity.quantity;
 
-                        trans.quantity += ord_quantity;
+                        trans.quantity += ord_quantity.quantity;
                         trans.time = SystemTime::now();
-                        ord_quantity = 0;
+                        ord_quantity.quantity = 0;
 
                         // remove ord from buy_orders
                         self.cancel(id);
-                    } else if ord.quantity == ord_quantity {
+                    } else if ord.quantity == ord_quantity.quantity {
                         order.remove(0);
 
-                        trans.quantity += ord_quantity;
+                        trans.quantity += ord_quantity.quantity;
                         trans.time = SystemTime::now();
-                        ord_quantity = 0;
+                        ord_quantity.quantity = 0;
 
                         self.cancel(id);
                     } else {
-                        ord_quantity = ord_quantity - ord.quantity;
+                        ord_quantity.quantity = ord_quantity.quantity - ord.quantity;
 
                         trans.quantity += ord.quantity;
                         trans.time = SystemTime::now();
@@ -282,6 +292,24 @@ impl OrderBook {
         for (_, orders) in self.sell_orders.iter_mut() {
             if let Some(ord) = orders.iter_mut().find(|b| b.id == id) {
                 return Ok(ord);
+            }
+        }
+        Err(Error)
+    }
+
+    pub fn get_buy_order_quantity(&self, id: u128) -> Result<u128, Error> {
+        for (_, orders) in self.buy_orders.iter() {
+            if let Some(ord) = orders.iter().find(|b| b.id == id) {
+                return Ok(ord.quantity);
+            }
+        }
+        Err(Error)
+    }
+
+    pub fn get_sell_order_quantity(&self, id: u128) -> Result<u128, Error> {
+        for (_, orders) in self.sell_orders.iter() {
+            if let Some(ord) = orders.iter().find(|b| b.id == id) {
+                return Ok(ord.quantity);
             }
         }
         Err(Error)
