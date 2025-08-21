@@ -84,13 +84,7 @@ impl OrderBook {
             println!("not a buy order");
             return;
         }
-
-        // while there are still sells <= buy price --> buy and push that to part of the transaction
-        // or resolve when quantity hits 0
-        let mut trans = Transaction::new();
-
         // resolve/loop
-        self.transactions.push(trans);
     }
 
     pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
@@ -116,11 +110,7 @@ impl OrderBook {
             println!("not a sell order");
             return;
         }
-
-        let mut trans = Transaction::new();
-
-       // resolve
-        self.transactions.push(trans);
+        // resolve
     }
 
     pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
@@ -142,65 +132,86 @@ impl OrderBook {
     }
 
     pub fn resolve(self: &mut Self) {
-        // change for quantity
-        if self.buy_orders.last_entry().unwrap().key()
-            >= self.sell_orders.first_entry().unwrap().key()
-        {
-            self.buy_orders.pop_last();
-            let (trans, _) = self.sell_orders.pop_first().unwrap();
-            self.transactions.push(Transaction {
-                price: trans,
-                time: SystemTime::now(),
-            });
-        }
-
-        while {
-            let buy_order = self.get_mut_buy_order(id).unwrap();
-            buy_order.quantity > 0
-        } {
-            if self.sell_orders.is_empty() {
+        // need to buy called in buy/sell so the trades get resolved correctly by time they come in
+        // Keep resolving orders while there are matching prices
+        loop {
+            if self.buy_orders.is_empty() || self.sell_orders.is_empty() {
                 break;
             }
 
-            let mut entry = self.sell_orders.first_entry().unwrap();
-            let sell_price = *entry.key();
-            if price < sell_price {
+            let buy_price = if let Some((price, _)) = self.buy_orders.last_key_value() {
+                *price
+            } else {
+                break;
+            };
+
+            let sell_price = if let Some((price, _)) = self.sell_orders.first_key_value() {
+                *price
+            } else {
+                break;
+            };
+
+            if buy_price < sell_price {
                 break;
             }
 
-            let orders = entry.get_mut();
-            if let Some(ord) = orders.first_mut() {
-                let buy_order = self.get_mut_buy_order(id).unwrap();
+            let mut should_remove_buy_price = false;
+            let mut should_remove_sell_price = false;
+            let mut match_quantity = 0;
 
-                if ord.quantity > buy_order.quantity {
-                    ord.quantity -= buy_order.quantity;
-
-                    trans.quantity += buy_order.quantity;
-                    trans.time = SystemTime::now();
-                    buy_order.quantity = 0;
-                    drop(buy_order);
-
-                    self.cancel(id);
-                } else if ord.quantity == buy_order.quantity {
-                    trans.quantity += buy_order.quantity;
-                    trans.time = SystemTime::now();
-                    buy_order.quantity = 0;
-                    drop(buy_order);
-
-                    orders.remove(0);
-                    self.cancel(id);
-                } else {
-                    buy_order.quantity -= ord.quantity;
-
-                    trans.quantity += ord.quantity;
-                    trans.time = SystemTime::now();
-
-                    orders.remove(0);
+            // First, get the order details without mutable borrows
+            if let Some(buy_orders) = self.buy_orders.get(&buy_price) {
+                if let Some(sell_orders) = self.sell_orders.get(&sell_price) {
+                    if !buy_orders.is_empty() && !sell_orders.is_empty() {
+                        let buy_qty = buy_orders[0].quantity;
+                        let sell_qty = sell_orders[0].quantity;
+                        match_quantity = std::cmp::min(buy_qty, sell_qty);
+                    }
                 }
             }
 
-            if orders.is_empty() {
-                entry.remove();
+            if match_quantity > 0 {
+                // Now process the orders with separate mutable borrows
+                if let Some(buy_orders) = self.buy_orders.get_mut(&buy_price) {
+                    if let Some(sell_orders) = self.sell_orders.get_mut(&sell_price) {
+                        if !buy_orders.is_empty() && !sell_orders.is_empty() {
+                            // Update buy order
+                            let buy_order = &mut buy_orders[0];
+                            buy_order.quantity -= match_quantity;
+                            if buy_order.quantity == 0 {
+                                buy_orders.remove(0);
+                                should_remove_buy_price = buy_orders.is_empty();
+                            }
+
+                            // Update sell order
+                            let sell_order = &mut sell_orders[0];
+                            sell_order.quantity -= match_quantity;
+                            if sell_order.quantity == 0 {
+                                sell_orders.remove(0);
+                                should_remove_sell_price = sell_orders.is_empty();
+                            }
+
+                            // Create transaction
+                            let transaction = Transaction {
+                                price: sell_price, // Use sell price as the match price
+                                quantity: match_quantity,
+                                time: SystemTime::now(),
+                            };
+                            self.transactions.push(transaction);
+                        }
+                    }
+                }
+
+                // Remove empty price levels
+                if should_remove_buy_price {
+                    self.buy_orders.remove(&buy_price);
+                }
+                if should_remove_sell_price {
+                    self.sell_orders.remove(&sell_price);
+                }
+            } else {
+                // No more matches possible
+                break;
             }
         }
     }
@@ -209,16 +220,16 @@ impl OrderBook {
         println!("Order Book Stats");
         println!("-------------------");
         println!("bids");
-        for (bid, order) in self.buy_orders.iter() {
+        for (_, order) in self.buy_orders.iter() {
             for ord in order {
-                println!("Bid price: {}", ord.price);
+                println!("Bid: price: {}, quantity {}", ord.price, ord.quantity);
             }
         }
         println!("-------------------");
         println!("asks");
-        for (ask, order) in self.sell_orders.iter() {
+        for (_, order) in self.sell_orders.iter() {
             for ord in order {
-                println!("Bid price: {}", ord.price);
+                println!("Ask: price: {}, quantity {}", ord.price, ord.quantity);
             }
         }
     }

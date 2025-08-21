@@ -23,6 +23,8 @@ fn main() {
     }
 
     ord_book.display();
+    ord_book.resolve();
+    ord_book.display();
 
     // let mut ord_book = OrderBook::build();
 
