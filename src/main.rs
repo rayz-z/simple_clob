@@ -17,14 +17,14 @@ fn main() {
             } else {
                 ord_book.sell(false, price, 1);
             }
+            ord_book.display();
         }
     } else {
         println!("Failed to build OrderGenerator!");
     }
 
     ord_book.display();
-    ord_book.resolve();
-    ord_book.display();
+
 
     // let mut ord_book = OrderBook::build();
 

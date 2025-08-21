@@ -40,6 +40,19 @@ pub struct OrderBook {
 //     fn display(&self) {
 //     }
 // }
+
+impl Order {
+    pub fn new() -> Self {
+        Order {
+            buy_order: true,
+            price: 0,
+            quantity: 0,
+            id: 0,
+            time_created: SystemTime::now(),
+        }
+    }
+}
+
 impl Transaction {
     pub fn new() -> Self {
         Transaction {
@@ -85,6 +98,7 @@ impl OrderBook {
             return;
         }
         // resolve/loop
+        self.resolve();
     }
 
     pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
@@ -111,23 +125,52 @@ impl OrderBook {
             return;
         }
         // resolve
+        self.resolve();
     }
 
     pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
-        for (_, orders) in self.buy_orders.iter_mut() {
+        let mut ord = Order::new();
+        let mut remove_sell = false;
+        let mut remove_buy = false;
+
+        for (price, orders) in self.buy_orders.iter_mut() {
             let mut index = 0;
             if let Some(_) = orders.iter().find(|b| b.id == id) {
-                return Ok(orders.remove(index));
+                // remove from buy_orders
+                let order = orders.remove(index);
+
+                if orders.is_empty() {
+                    remove_buy = true;
+                }
+
+                ord = order;
             }
             index += 1;
         }
-        for (_, orders) in self.sell_orders.iter_mut() {
+        for (price, orders) in self.sell_orders.iter_mut() {
             let mut index = 0;
             if let Some(_) = orders.iter().find(|b| b.id == id) {
-                return Ok(orders.remove(index));
+                // remove from sell_orders
+                let order = orders.remove(index);
+
+                if orders.is_empty() {
+                    remove_sell = true;
+                }
+
+                ord = order;
             }
             index += 1;
         }
+
+        if ord.quantity != 0 {
+            if remove_buy {
+                self.buy_orders.remove(&ord.price);
+            } else if remove_sell {
+                self.sell_orders.remove(&ord.price);
+            }
+            return Ok(ord);
+        }
+
         Err(Error)
     }
 
@@ -193,7 +236,7 @@ impl OrderBook {
 
                             // Create transaction
                             let transaction = Transaction {
-                                price: sell_price, // Use sell price as the match price
+                                price: sell_price, // Use sell price as the match price --> aggro sell uses buy_price?
                                 quantity: match_quantity,
                                 time: SystemTime::now(),
                             };
@@ -312,6 +355,7 @@ mod tests {
         a.buy(true, 2, 1);
 
         assert_eq!(a.buy_orders.len(), 1);
+        assert_eq!(a.total_orders, 1);
     }
 
     #[test]
@@ -320,6 +364,7 @@ mod tests {
         a.sell(false, 2, 1);
 
         assert_eq!(a.sell_orders.len(), 1);
+        assert_eq!(a.total_orders, 1);
     }
 
     #[test]
@@ -328,22 +373,136 @@ mod tests {
         a.buy(true, 2, 1);
 
         let b = a.cancel(0);
+        a.display();
+        println!("{}", a.buy_orders.len());
 
         assert_eq!(a.buy_orders.len(), 0);
     }
 
-    // #[test]
-    // fn test_resolve() {
-    //     let mut a = OrderBook::build();
-    //     a.sell(false, 2);
-    //     a.buy(true, 2);
+    #[test]
+    fn test_order_matching_buy_aggressive() {
+        let mut a = OrderBook::build();
+        // Place a sell order first
+        a.sell(false, 100, 10);
+        // Place a buy order that should match
+        a.buy(true, 100, 5);
 
-    //     a.resolve();
+        // Should have 1 transaction
+        assert_eq!(a.transactions.len(), 1);
+        // Sell order should still exist with remaining quantity
+        assert_eq!(a.sell_orders.len(), 1);
+        // Buy order should be fully filled and removed
+        assert_eq!(a.buy_orders.len(), 0);
+    }
 
-    //     assert_eq!(a.transactions.len(), 1);
-    //     assert_eq!(a.buy_orders.len(), 0);
-    //     assert_eq!(a.sell_orders.len(), 0);
-    // }
+    #[test]
+    fn test_order_matching_sell_aggressive() {
+        let mut a = OrderBook::build();
+        // Place a buy order first
+        a.buy(true, 100, 10);
+        // Place a sell order that should match
+        a.sell(false, 100, 5);
 
-    // add test for multiple orders
+        // Should have 1 transaction
+        assert_eq!(a.transactions.len(), 1);
+        // Buy order should still exist with remaining quantity
+        assert_eq!(a.buy_orders.len(), 1);
+        // Sell order should be fully filled and removed
+        assert_eq!(a.sell_orders.len(), 0);
+    }
+
+    #[test]
+    fn test_exact_order_match() {
+        let mut a = OrderBook::build();
+        // Place a sell order
+        a.sell(false, 100, 10);
+        // Place a buy order with exact same quantity
+        a.buy(true, 100, 10);
+
+        // Should have 1 transaction
+        assert_eq!(a.transactions.len(), 1);
+        // Both orders should be fully filled and removed
+        assert_eq!(a.buy_orders.len(), 0);
+        assert_eq!(a.sell_orders.len(), 0);
+    }
+
+    #[test]
+    fn test_no_matching_orders() {
+        let mut a = OrderBook::build();
+        // Place a sell order at higher price
+        a.sell(false, 100, 10);
+        // Place a buy order at lower price (no match)
+        a.buy(true, 90, 5);
+
+        // Should have no transactions
+        assert_eq!(a.transactions.len(), 0);
+        // Both orders should remain
+        assert_eq!(a.buy_orders.len(), 1);
+        assert_eq!(a.sell_orders.len(), 1);
+    }
+
+    #[test]
+    fn test_resolve_function() {
+        let mut a = OrderBook::build();
+        // Place multiple orders that can match
+        a.sell(false, 100, 10);
+        a.sell(false, 95, 5);
+        a.buy(true, 100, 8);
+        a.buy(true, 98, 7);
+
+        // Manually resolve all possible matches
+        a.resolve();
+
+        // Should have multiple transactions
+        assert!(a.transactions.len() > 0);
+        // Orders should be properly matched and quantities updated
+        assert!(a.buy_orders.len() <= 2);
+        assert!(a.sell_orders.len() <= 2);
+    }
+
+    #[test]
+    fn test_zero_quantity_rejection() {
+        let mut a = OrderBook::build();
+        // Try to place orders with zero quantity
+        a.buy(true, 100, 0);
+        a.sell(false, 100, 0);
+
+        // Should have no orders
+        assert_eq!(a.buy_orders.len(), 0);
+        assert_eq!(a.sell_orders.len(), 0);
+        assert_eq!(a.total_orders, 0);
+    }
+
+    #[test]
+    fn test_order_priority() {
+        let mut a = OrderBook::build();
+        // Place multiple sell orders at same price
+        a.sell(false, 100, 5);
+        a.sell(false, 100, 3);
+        a.sell(false, 100, 7);
+
+        // Place a buy order that should match the first one
+        a.buy(true, 100, 4);
+
+        // Should have 1 transaction
+        assert_eq!(a.transactions.len(), 1);
+        // First sell order should be partially filled
+        assert_eq!(a.sell_orders.len(), 1);
+        // Buy order should be fully filled and removed
+        assert_eq!(a.buy_orders.len(), 0);
+    }
+
+    #[test]
+    fn test_transaction_details() {
+        let mut a = OrderBook::build();
+        a.sell(false, 100, 10);
+        a.buy(true, 100, 5);
+
+        // Check transaction details
+        assert_eq!(a.transactions.len(), 1);
+        let transaction = &a.transactions[0];
+        assert_eq!(transaction.price, 100);
+        assert_eq!(transaction.quantity, 5);
+        assert!(transaction.time > SystemTime::UNIX_EPOCH);
+    }
 }
