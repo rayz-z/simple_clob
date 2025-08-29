@@ -25,21 +25,4 @@ fn main() {
 
     ord_book.display();
 
-
-    // let mut ord_book = OrderBook::build();
-
-    // ord_book.buy(true, 10);
-    // ord_book.buy(true, 12);
-    // ord_book.buy(true, 13);
-    // ord_book.buy(true, 14);
-    // ord_book.buy(true, 19);
-
-    // ord_book.sell(false, 20);
-    // ord_book.sell(false, 22);
-    // ord_book.sell(false, 23);
-    // ord_book.sell(false, 25);
-    // ord_book.sell(false, 28);
-    // ord_book.sell(false, 29);
-
-    // ord_book.display();
 }

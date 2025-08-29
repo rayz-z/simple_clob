@@ -3,11 +3,12 @@ use std::time::SystemTime;
 pub mod order_generator;
 // pub mod order_match;
 use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 
 type Price = u64;
 
 // simulate order flow
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     buy_order: bool, // refactor as enum
     price: Price,
@@ -16,30 +17,21 @@ pub struct Order {
     time_created: SystemTime,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     price: Price,
     quantity: u128,
     time: SystemTime,
 }
 
-// pub trait Price {
-//     fn display(&self) {}
-// }
-
 // one asset
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct OrderBook {
     total_orders: u128,                       // historic amount
     buy_orders: BTreeMap<Price, Vec<Order>>,  // refactor into Vec<Order>
     sell_orders: BTreeMap<Price, Vec<Order>>, // "        " f64 doesn't implement eq
     transactions: Vec<Transaction>,
 }
-
-// impl Price for Order {
-//     fn display(&self) {
-//     }
-// }
 
 impl Order {
     pub fn new() -> Self {
@@ -97,7 +89,7 @@ impl OrderBook {
             println!("not a buy order");
             return;
         }
-        // resolve/loop
+        // resolve
         self.resolve();
     }
 
@@ -265,17 +257,27 @@ impl OrderBook {
         println!("bids");
         for (_, order) in self.buy_orders.iter() {
             for ord in order {
-                println!("Bid: price: {}, quantity {}", ord.price, ord.quantity);
+                println!("Bid: price: {}, quantity: {}", ord.price, ord.quantity);
             }
         }
         println!("-------------------");
         println!("asks");
         for (_, order) in self.sell_orders.iter() {
             for ord in order {
-                println!("Ask: price: {}, quantity {}", ord.price, ord.quantity);
+                println!("Ask: price: {}, quantity: {}", ord.price, ord.quantity);
             }
         }
+        println!("-------------------");
+        println!("transactions");
+        for transaction in self.transactions.iter() {
+            println!(
+                "Transaction: price: {}, quantity: {}, time: {:?}",
+                transaction.price, transaction.quantity, transaction.time
+            );
+        }
     }
+
+    pub fn display_depth_chart(&self) {}
 
     pub fn get_buy_order(&self, id: u128) -> Result<&Order, Error> {
         for (_, orders) in self.buy_orders.iter() {
@@ -329,6 +331,10 @@ impl OrderBook {
             }
         }
         Err(Error)
+    }
+
+    pub fn get_tot_orders(&self) -> &u128 {
+        &self.total_orders
     }
 }
 
