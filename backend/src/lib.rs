@@ -120,6 +120,10 @@ impl OrderBook {
         self.resolve();
     }
 
+    pub fn market_buy(&self, quantity: u128) {}
+
+    pub fn market_sell(&self,) {}
+
     pub fn cancel(&mut self, id: u128) -> Result<Order, Error> {
         let mut ord = Order::new();
         let mut remove_sell = false;

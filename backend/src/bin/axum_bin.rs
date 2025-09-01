@@ -1,17 +1,29 @@
-use axum::Json;
-use axum::{Router, extract::State, routing::get};
-use backend::OrderBook;
-use backend::order_generator::OrderGenerator;
+use axum::{
+    Json,
+    {Router, extract::State, routing::get},
+};
+use backend::{OrderBook, order_generator::OrderGenerator};
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
     let ord_book = Arc::new(build_order_book());
 
+    let cors = CorsLayer::new()
+        .allow_origin(
+            "http://localhost:5173"
+                .parse::<axum::http::HeaderValue>()
+                .unwrap(),
+        )
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/", get(home))
         .route("/clob-stats", get(clob_stats))
-        .with_state(ord_book);
+        .with_state(ord_book)
+        .layer(cors);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
@@ -25,6 +37,8 @@ async fn home() -> &'static str {
 async fn clob_stats(State(ord_book): State<Arc<OrderBook>>) -> Json<OrderBook> {
     Json(ord_book.as_ref().clone())
 }
+
+async fn post_orders() {}
 
 fn build_order_book() -> OrderBook {
     let mut ord_book = OrderBook::build();
