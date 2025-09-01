@@ -1,0 +1,1 @@
+fn({type error}, {type error}) -> impl Future<Output = axum::Json<OrderBook>> {clob_stats}: Handler<_, _>
