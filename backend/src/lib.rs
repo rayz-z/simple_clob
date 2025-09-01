@@ -66,13 +66,14 @@ impl OrderBook {
         }
     }
 
-    pub fn buy(self: &mut Self, buy: bool, price: Price, quantity: u128) {
+    pub fn buy(self: &mut Self, buy: bool, price: Price, quantity: u128) -> Result<u128, ()> {
         if quantity == 0 {
             println!("quantity can't be 0");
-            return;
+            return Err(())
         }
 
         let id = self.total_orders;
+        let id2 = id.clone();
         if buy {
             self.buy_orders
                 .entry(price)
@@ -87,19 +88,21 @@ impl OrderBook {
             self.total_orders += 1;
         } else {
             println!("not a buy order");
-            return;
+            return Err(())
         }
         // resolve
         self.resolve();
+        return Ok(id2)
     }
 
-    pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) {
+    pub fn sell(self: &mut Self, buy: bool, price: Price, quantity: u128) -> Result<u128, ()> {
         if quantity == 0 {
             println!("quantity can't be 0");
-            return;
+            return Err(())
         }
 
         let id = self.total_orders;
+        let id2 = id.clone();
         if !buy {
             self.sell_orders
                 .entry(price)
@@ -114,10 +117,11 @@ impl OrderBook {
             self.total_orders += 1;
         } else {
             println!("not a sell order");
-            return;
+            return Err(())
         }
         // resolve
         self.resolve();
+        return Ok(id2) // if order resolves this id is still returned
     }
 
     pub fn market_buy(&self, quantity: u128) {}
