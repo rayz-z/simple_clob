@@ -1,0 +1,15 @@
+# Prevent GitHub from thinking lock/config files are Makefile
+Cargo.lock linguist-detectable=false
+package-lock.json linguist-detectable=false
+
+# Ignore any Makefile misclassifications
+*.mk linguist-detectable=false
+Makefile linguist-detectable=false
+
+# Explicitly set backend/frontend languages
+backend/**/*.rs linguist-language=Rust
+frontend/**/*.ts linguist-language=TypeScript
+frontend/**/*.tsx linguist-language=TypeScript
+frontend/**/*.js linguist-language=JavaScript
+frontend/**/*.html linguist-language=HTML
+frontend/**/*.css linguist-language=CSS
